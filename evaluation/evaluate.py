@@ -4,7 +4,7 @@ import os
 import numpy as np
 from PIL import Image
 import csv
-from evaluation.matrics_calculator import MetricsCalculator
+from matrics_calculator import MetricsCalculator
 
 def mask_decode(encoded_mask,image_shape=[512,512]):
     length=image_shape[0]*image_shape[1]
@@ -266,6 +266,7 @@ if __name__=="__main__":
         for tgt_image_folder_key,tgt_image_folder in tgt_image_folders.items():
             tgt_image_path=os.path.join(tgt_image_folder, base_image_path)
             print(f"evluating method: {tgt_image_folder_key}")
+            print(f"tgt_image_path: {tgt_image_path}")
             
             tgt_image = Image.open(tgt_image_path)
             if tgt_image.size[0] != tgt_image.size[1]:
@@ -277,6 +278,7 @@ if __name__=="__main__":
             for metric in metrics:
                 print(f"evluating metric: {metric}")
                 evaluation_result.append(calculate_metric(metrics_calculator,metric,src_image, tgt_image, mask, mask, original_prompt, editing_prompt))
+                exit()  
                         
         with open(result_path,'a+',newline="") as f:
             csv_write = csv.writer(f)
