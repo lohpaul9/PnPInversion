@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sketch App</title>
+    <style>
+        body { text-align: center; font-family: Arial; }
+        canvas { border: 1px solid black; }
+    </style>
+</head>
+<body>
+    <h1>Sketch on Image</h1>
+    <input type="file" id="fileInput" accept="image/*" />
+    <select id="imageSelect"></select>
+    <button id="loadBtn">Load Selected Image</button>
+    <button id="saveBtn">Save Sketch</button>
+    <br><br>
+    <canvas id="canvas" width="512" height="512"></canvas>
+    <canvas id="sketchCanvas" width="512" height="512"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const sketchCanvas = document.getElementById('sketchCanvas');
+        const sketchCtx = sketchCanvas.getContext('2d');
+        const ctx = canvas.getContext('2d');
+        let drawing = false;
+
+        const fileInput = document.getElementById('fileInput');
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.globalAlpha = 0.5;
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    ctx.globalAlpha = 1.0;
+                    sketchCtx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        canvas.addEventListener('mousedown', () => drawing = true);
+        canvas.addEventListener('mouseup', () => drawing = false);
+        canvas.addEventListener('mousemove', (e) => {
+            if (drawing) {
+                ctx.lineTo(e.offsetX, e.offsetY);
+                ctx.stroke();
+                sketchCtx.lineTo(e.offsetX, e.offsetY); // Draw on the sketch canvas
+                sketchCtx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(e.offsetX, e.offsetY);
+                sketchCtx.beginPath();
+                sketchCtx.moveTo(e.offsetX, e.offsetY);
+            }
+        });
+
+        // Fetch the list of images on page load
+        fetch('/images/')
+            .then(response => response.json())
+            .then(data => {
+                const imageSelect = document.getElementById('imageSelect');
+                data.images.forEach(image => {
+                    const option = document.createElement('option');
+                    option.value = image;
+                    option.textContent = image;
+                    imageSelect.appendChild(option);
+                });
+            });
+
+        document.getElementById('loadBtn').addEventListener('click', () => {
+            const selectedImage = document.getElementById('imageSelect').value;
+            const img = new Image();
+            img.onload = () => {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.globalAlpha = 0.5;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                ctx.globalAlpha = 1.0;
+                sketchCtx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
+            };
+            img.src = `/images/${selectedImage}`; // Load the selected image from the backend
+        });
+
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            sketchCanvas.toBlob(blob => {
+                const formData = new FormData();
+                const selectedImage = document.getElementById('imageSelect').value;
+                formData.append('file', blob, 'sketch.png');
+                console.log("Saving image to: ", selectedImage)
+
+                fetch(`/save/?image_path=${encodeURIComponent(selectedImage)}`, { method: 'POST', body: formData })
+                    .then(response => response.json())
+                    .then(data => alert(data.message));
+            });
+        });
+    </script>
+</body>
+</html>
