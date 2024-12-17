@@ -25,6 +25,7 @@
         const sketchCtx = sketchCanvas.getContext('2d');
         const ctx = canvas.getContext('2d');
         let drawing = false;
+        let data;
 
         const fileInput = document.getElementById('fileInput');
         fileInput.addEventListener('change', (e) => {
@@ -63,12 +64,13 @@
         // Fetch the list of images on page load
         fetch('/images/')
             .then(response => response.json())
-            .then(data => {
+            .then(fetchedData => {
+                data = fetchedData;
                 const imageSelect = document.getElementById('imageSelect');
-                data.images.forEach(image => {
+                data.images.forEach(imageInfo => {
                     const option = document.createElement('option');
-                    option.value = image;
-                    option.textContent = image;
+                    option.value = imageInfo.image_path;
+                    option.textContent = imageInfo.image_path;
                     imageSelect.appendChild(option);
                 });
             });
@@ -84,7 +86,61 @@
                 sketchCtx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
             };
             img.src = `/images/${selectedImage}`; // Load the selected image from the backend
+
+            // Fetch the mask and editing prompt
+            const selectedImageInfo = data.images.find(image => image.image_path === selectedImage);
+            if (selectedImageInfo) {
+                const encodedMask = selectedImageInfo.mask; // Assuming mask is in a suitable format
+                const editingPrompt = selectedImageInfo.editing_prompt;
+                displayMask(encodedMask); // Function to overlay the mask
+                displayEditingPrompt(editingPrompt); // Function to display the editing prompt
+            }
         });
+
+        function decodeMask(encodedMask, imageShape = [512, 512]) {
+            const length = imageShape[0] * imageShape[1];
+            const maskArray = new Array(length).fill(0);
+            
+            for (let i = 0; i < encodedMask.length; i += 2) {
+                const start = encodedMask[i];
+                const spliceLen = Math.min(encodedMask[i + 1], length - start);
+                for (let j = 0; j < spliceLen; j++) {
+                    maskArray[start + j] = 1;
+                }
+            }
+            // print the mask array shape
+            // turn into 2d array   
+            const mask2d = maskArray.reduce((acc, val, index) => {
+                const row = Math.floor(index / imageShape[1]);
+                const col = index % imageShape[1];
+                if (!acc[row]) acc[row] = [];
+                acc[row][col] = val;
+                return acc;
+            }, []);
+            return mask2d;
+        }
+
+        function displayMask(encodedMask) {
+            const mask = decodeMask(encodedMask); // Decode the mask
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+            console.log("mask: ", mask);
+
+            // mask is now a 2d array
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+            mask.forEach((row, i) => {
+                row.forEach((col, j) => {
+                    ctx.fillRect(i, j, 1, 1);
+                });
+            });
+        }
+
+        function displayEditingPrompt(prompt) {
+            // Display the editing prompt to the user
+            const promptElement = document.createElement('div');
+            promptElement.textContent = `Editing Instruction: ${prompt}`;
+            document.body.appendChild(promptElement);
+        }
 
         document.getElementById('saveBtn').addEventListener('click', () => {
             sketchCanvas.toBlob(blob => {

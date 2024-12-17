@@ -22,13 +22,20 @@ def get_root():
     with open("static/index.html", "r") as file:
         return HTMLResponse(content=file.read())
 
-# New route to get the list of images
+# New route to get the list of images with masks and editing prompts
 @app.get("/images/")
 async def get_images():
     prefix = "2_add_object_80"
-    images = [attributes['image_path'] for attributes in mapping_data.values() if attributes['image_path'].startswith(prefix)]
-    print("Filtered Images: ", images)
-    return {"images": images}
+    images_info = [
+        {
+            'image_path': attributes['image_path'],
+            'mask': attributes['mask'],
+            'editing_prompt': attributes['editing_prompt']
+        }
+        for attributes in mapping_data.values() if attributes['image_path'].startswith(prefix)
+    ]
+    # print("Filtered Images: ", images_info)
+    return {"images": images_info}
 
 # New route to serve images
 @app.get("/images/{image_path:path}")
