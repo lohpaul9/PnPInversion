@@ -47,8 +47,12 @@ def setup_seed(seed=1234):
 
 
 def load_image(image_path, device):
-    image = read_image(image_path)
-    image = image[:3].unsqueeze_(0).float() / 127.5 - 1.  # [-1, 1]
+    try:
+        image = read_image(image_path)
+    except:
+        image = Image.open(image_path).convert("RGB")
+        image = torch.tensor(np.array(image)).permute(2, 0, 1)
+    image = image[:3].unsqueeze_(0).float() / 127.5 - 1.
     image = F.interpolate(image, (512, 512))
     image = image.to(device)
     return image

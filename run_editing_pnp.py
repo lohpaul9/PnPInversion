@@ -10,6 +10,7 @@ import argparse
 import torch.nn as nn
 from transformers import CLIPTextModel, CLIPTokenizer
 import torchvision.transforms as T
+from tqdm import tqdm
 
 from utils.utils import txt_draw,load_512,latent2image
 
@@ -49,9 +50,9 @@ class Preprocess(nn.Module):
         self.vae = AutoencoderKL.from_pretrained(model_key, subfolder="vae", 
                                                  torch_dtype=torch.float16).to(self.device)
         self.tokenizer = CLIPTokenizer.from_pretrained(model_key, subfolder="tokenizer")
-        self.text_encoder = CLIPTextModel.from_pretrained(model_key, subfolder="text_encoder", revision="fp16",
+        self.text_encoder = CLIPTextModel.from_pretrained(model_key, subfolder="text_encoder",
                                                           torch_dtype=torch.float16).to(self.device)
-        self.unet = UNet2DConditionModel.from_pretrained(model_key, subfolder="unet", revision="fp16",
+        self.unet = UNet2DConditionModel.from_pretrained(model_key, subfolder="unet",
                                                          torch_dtype=torch.float16).to(self.device)
         self.scheduler = DDIMScheduler.from_pretrained(model_key, subfolder="scheduler")
         print(f'[INFO] loaded stable diffusion!')
@@ -392,7 +393,7 @@ class PNP(nn.Module):
 
     def sample_loop(self, x,guidance_scale,noisy_latent):
         with torch.autocast(device_type='cuda', dtype=torch.float32):
-            for i, t in enumerate(self.scheduler.timesteps, desc="Sampling"):
+            for i, t in tqdm(enumerate(self.scheduler.timesteps), desc="Sampling"):
                 x = self.denoise_step(x, t,guidance_scale,noisy_latent[-1-i])
 
             decoded_latent = self.decode_latent(x)
@@ -400,7 +401,7 @@ class PNP(nn.Module):
         return decoded_latent
 
 
-model_key = "runwayml/stable-diffusion-v1-5"
+model_key = "stable-diffusion-v1-5/stable-diffusion-v1-5"
 toy_scheduler = DDIMScheduler.from_pretrained(model_key, subfolder="scheduler")
 toy_scheduler.set_timesteps(NUM_DDIM_STEPS)
 
