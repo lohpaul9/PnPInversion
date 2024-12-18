@@ -6,7 +6,8 @@
     <title>Sketch App</title>
     <style>
         body { text-align: center; font-family: Arial; }
-        .canvas-container { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
+        .flex-container { display: flex; flex-wrap: wrap; justify-content: center; }
+        .canvas-container { display: flex; flex-direction: column; align-items: center; margin: 10px; }
         canvas { border: 1px solid black; }
         textarea { width: 300px; height: 100px; } /* Larger edit instruction box */
     </style>
@@ -18,22 +19,25 @@
     <button id="loadBtn">Load Selected Image</button>
     <button id="saveBtn">Save Sketch</button>
     <button id="editBtn">Edit Image</button>
+    <button id="undoBtn">Undo Last Sketch Line</button>
     <br><br>
-    <div class="canvas-container">
-        <label for="canvas">Canvas + Underlying Image</label>
-        <canvas id="canvas" width="512" height="512"></canvas>
-    </div>
-    <div class="canvas-container">
-        <label for="sketchCanvas">View Sketch</label>
-        <canvas id="sketchCanvas" width="512" height="512"></canvas>
-    </div>
-    <div class="canvas-container">
-        <label for="editInstruction">Edit Instruction</label>   
-        <textarea id="editInstruction" placeholder="Enter edit instruction"></textarea>
-    </div>
-    <div class="canvas-container" id="editCanvasContainer" style="display: none;">
-        <label for="editCanvas">Model Output</label>
-        <canvas id="editCanvas" width="512" height="512"></canvas>
+    <div class="flex-container">
+        <div class="canvas-container">
+            <label for="canvas">Canvas + Underlying Image</label>
+            <canvas id="canvas" width="512" height="512"></canvas>
+        </div>
+        <div class="canvas-container">
+            <label for="sketchCanvas">View Sketch</label>
+            <canvas id="sketchCanvas" width="512" height="512"></canvas>
+        </div>
+        <div class="canvas-container">
+            <label for="editInstruction">Edit Instruction</label>   
+            <textarea id="editInstruction" placeholder="Enter edit instruction"></textarea>
+        </div>
+        <div class="canvas-container" id="editCanvasContainer" style="display: none;">
+            <label for="editCanvas">Model Output</label>
+            <canvas id="editCanvas" width="512" height="512"></canvas>
+        </div>
     </div>
     <canvas id="hiddenOriginalImageCanvas" width="512" height="512" style="display: none;"></canvas>
     <script>
@@ -48,6 +52,8 @@
         const hiddenOriginalImageCtx = hiddenOriginalImageCanvas.getContext('2d');
         let drawing = false;
         let data;
+        let sketchPaths = [];
+        let currentPath = [];
 
         const fileInput = document.getElementById('fileInput');
         fileInput.addEventListener('change', (e) => {
@@ -61,18 +67,27 @@
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                     ctx.globalAlpha = 1.0;
                     sketchCtx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
-                    editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height); // Clear edit canvas
-                    editCanvasContainer.style.display = 'none'; // Hide edit canvas
+                    editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height);
+                    editCanvasContainer.style.display = 'none';
+                    sketchPaths = [];
                 };
                 img.src = event.target.result;
             };
             reader.readAsDataURL(file);
         });
 
-        canvas.addEventListener('mousedown', () => drawing = true);
-        canvas.addEventListener('mouseup', () => drawing = false);
+        canvas.addEventListener('mousedown', () => {
+            drawing = true;
+            currentPath = [];
+        });
+        canvas.addEventListener('mouseup', () => {
+            drawing = false;
+            sketchPaths.push(currentPath);
+            currentPath = [];
+        });
         canvas.addEventListener('mousemove', (e) => {
             if (drawing) {
+                currentPath.push({ x: e.offsetX, y: e.offsetY });
                 ctx.lineTo(e.offsetX, e.offsetY);
                 ctx.stroke();
                 sketchCtx.lineTo(e.offsetX, e.offsetY); // Draw on the sketch canvas
@@ -110,12 +125,12 @@
                 sketchCtx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
                 hiddenOriginalImageCtx.clearRect(0, 0, hiddenOriginalImageCanvas.width, hiddenOriginalImageCanvas.height);
                 hiddenOriginalImageCtx.drawImage(img, 0, 0, hiddenOriginalImageCanvas.width, hiddenOriginalImageCanvas.height);
-                editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height); // Clear edit canvas
-                editCanvasContainer.style.display = 'none'; // Hide edit canvas
+                editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height);
+                editCanvasContainer.style.display = 'none';
+                sketchPaths = [];
             };
-            img.src = `/images/${selectedImage}`; // Load the selected image from the backend
+            img.src = `/images/${selectedImage}`;
 
-            // Fetch the mask and editing instruction
             const selectedImageInfo = data.images.find(image => image.image_path === selectedImage);
             if (selectedImageInfo) {
                 const encodedMask = selectedImageInfo.mask; // Assuming mask is in a suitable format
@@ -126,7 +141,6 @@
         });
 
         function displayEditingInstruction(instruction) {
-            // Display the editing instruction to the user
             const instructionElement = document.getElementById('editInstruction');
             instructionElement.value = instruction;
         }
@@ -161,7 +175,7 @@
                             img.onload = () => {
                                 editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height);
                                 editCtx.drawImage(img, 0, 0, editCanvas.width, editCanvas.height);
-                                editCanvasContainer.style.display = 'flex'; // Show edit canvas
+                                editCanvasContainer.style.display = 'flex';
                             };
                             img.src = editedImageUrl;
                         })
@@ -169,6 +183,35 @@
                 });
             });
         });
+
+        document.getElementById('undoBtn').addEventListener('click', () => {
+            if (sketchPaths.length > 0) {
+                sketchPaths.pop();
+                redrawSketch();
+            }
+        });
+
+        function redrawSketch() {
+            sketchCtx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = 0.5;
+            ctx.drawImage(hiddenOriginalImageCanvas, 0, 0, canvas.width, canvas.height);
+            ctx.globalAlpha = 1.0;
+            sketchPaths.forEach(path => {
+                sketchCtx.beginPath();
+                sketchCtx.moveTo(path[0].x, path[0].y);
+                for (let i = 1; i < path.length; i++) {
+                    sketchCtx.lineTo(path[i].x, path[i].y);
+                }
+                sketchCtx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(path[0].x, path[0].y);
+                for (let i = 1; i < path.length; i++) {
+                    ctx.lineTo(path[i].x, path[i].y);
+                }
+                ctx.stroke();
+            });
+        }
     </script>
 </body>
 </html>
