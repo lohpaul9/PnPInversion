@@ -6,7 +6,9 @@
     <title>Sketch App</title>
     <style>
         body { text-align: center; font-family: Arial; }
+        .canvas-container { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; }
         canvas { border: 1px solid black; }
+        textarea { width: 300px; height: 100px; } /* Larger edit instruction box */
     </style>
 </head>
 <body>
@@ -15,15 +17,35 @@
     <select id="imageSelect"></select>
     <button id="loadBtn">Load Selected Image</button>
     <button id="saveBtn">Save Sketch</button>
+    <button id="editBtn">Edit Image</button>
     <br><br>
-    <canvas id="canvas" width="512" height="512"></canvas>
-    <canvas id="sketchCanvas" width="512" height="512"></canvas>
-
+    <div class="canvas-container">
+        <label for="canvas">Canvas + Underlying Image</label>
+        <canvas id="canvas" width="512" height="512"></canvas>
+    </div>
+    <div class="canvas-container">
+        <label for="sketchCanvas">View Sketch</label>
+        <canvas id="sketchCanvas" width="512" height="512"></canvas>
+    </div>
+    <div class="canvas-container">
+        <label for="editInstruction">Edit Instruction</label>   
+        <textarea id="editInstruction" placeholder="Enter edit instruction"></textarea>
+    </div>
+    <div class="canvas-container" id="editCanvasContainer" style="display: none;">
+        <label for="editCanvas">Model Output</label>
+        <canvas id="editCanvas" width="512" height="512"></canvas>
+    </div>
+    <canvas id="hiddenOriginalImageCanvas" width="512" height="512" style="display: none;"></canvas>
     <script>
         const canvas = document.getElementById('canvas');
         const sketchCanvas = document.getElementById('sketchCanvas');
-        const sketchCtx = sketchCanvas.getContext('2d');
+        const editCanvas = document.getElementById('editCanvas');
+        const editCanvasContainer = document.getElementById('editCanvasContainer');
+        const hiddenOriginalImageCanvas = document.getElementById('hiddenOriginalImageCanvas');
         const ctx = canvas.getContext('2d');
+        const sketchCtx = sketchCanvas.getContext('2d');
+        const editCtx = editCanvas.getContext('2d');
+        const hiddenOriginalImageCtx = hiddenOriginalImageCanvas.getContext('2d');
         let drawing = false;
         let data;
 
@@ -39,6 +61,8 @@
                     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                     ctx.globalAlpha = 1.0;
                     sketchCtx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
+                    editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height); // Clear edit canvas
+                    editCanvasContainer.style.display = 'none'; // Hide edit canvas
                 };
                 img.src = event.target.result;
             };
@@ -84,62 +108,27 @@
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
                 ctx.globalAlpha = 1.0;
                 sketchCtx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
+                hiddenOriginalImageCtx.clearRect(0, 0, hiddenOriginalImageCanvas.width, hiddenOriginalImageCanvas.height);
+                hiddenOriginalImageCtx.drawImage(img, 0, 0, hiddenOriginalImageCanvas.width, hiddenOriginalImageCanvas.height);
+                editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height); // Clear edit canvas
+                editCanvasContainer.style.display = 'none'; // Hide edit canvas
             };
             img.src = `/images/${selectedImage}`; // Load the selected image from the backend
 
-            // Fetch the mask and editing prompt
+            // Fetch the mask and editing instruction
             const selectedImageInfo = data.images.find(image => image.image_path === selectedImage);
             if (selectedImageInfo) {
                 const encodedMask = selectedImageInfo.mask; // Assuming mask is in a suitable format
-                const editingPrompt = selectedImageInfo.editing_prompt;
-                displayMask(encodedMask); // Function to overlay the mask
-                displayEditingPrompt(editingPrompt); // Function to display the editing prompt
+                const editingInstruction = selectedImageInfo.editing_instruction;
+                // displayMask(encodedMask); // Function to overlay the mask
+                displayEditingInstruction(editingInstruction); // Function to display the editing instruction
             }
         });
 
-        function decodeMask(encodedMask, imageShape = [512, 512]) {
-            const length = imageShape[0] * imageShape[1];
-            const maskArray = new Array(length).fill(0);
-            
-            for (let i = 0; i < encodedMask.length; i += 2) {
-                const start = encodedMask[i];
-                const spliceLen = Math.min(encodedMask[i + 1], length - start);
-                for (let j = 0; j < spliceLen; j++) {
-                    maskArray[start + j] = 1;
-                }
-            }
-            // print the mask array shape
-            // turn into 2d array   
-            const mask2d = maskArray.reduce((acc, val, index) => {
-                const row = Math.floor(index / imageShape[1]);
-                const col = index % imageShape[1];
-                if (!acc[row]) acc[row] = [];
-                acc[row][col] = val;
-                return acc;
-            }, []);
-            return mask2d;
-        }
-
-        function displayMask(encodedMask) {
-            const mask = decodeMask(encodedMask); // Decode the mask
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-            console.log("mask: ", mask);
-
-            // mask is now a 2d array
-            ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
-            mask.forEach((row, i) => {
-                row.forEach((col, j) => {
-                    ctx.fillRect(i, j, 1, 1);
-                });
-            });
-        }
-
-        function displayEditingPrompt(prompt) {
-            // Display the editing prompt to the user
-            const promptElement = document.createElement('div');
-            promptElement.textContent = `Editing Instruction: ${prompt}`;
-            document.body.appendChild(promptElement);
+        function displayEditingInstruction(instruction) {
+            // Display the editing instruction to the user
+            const instructionElement = document.getElementById('editInstruction');
+            instructionElement.value = instruction;
         }
 
         document.getElementById('saveBtn').addEventListener('click', () => {
@@ -152,6 +141,32 @@
                 fetch(`/save/?image_path=${encodeURIComponent(selectedImage)}`, { method: 'POST', body: formData })
                     .then(response => response.json())
                     .then(data => alert(data.message));
+            });
+        });
+
+        document.getElementById('editBtn').addEventListener('click', () => {
+            const editInstruction = document.getElementById('editInstruction').value;
+            hiddenOriginalImageCanvas.toBlob(originalBlob => {
+                sketchCanvas.toBlob(sketchBlob => {
+                    const formData = new FormData();
+                    formData.append('image', originalBlob, 'original.png');
+                    formData.append('sketch_image', sketchBlob, 'sketch.png');
+                    formData.append('instruction', editInstruction);
+
+                    fetch('/edit/', { method: 'POST', body: formData })
+                        .then(response => response.blob())
+                        .then(editedBlob => {
+                            const editedImageUrl = URL.createObjectURL(editedBlob);
+                            const img = new Image();
+                            img.onload = () => {
+                                editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height);
+                                editCtx.drawImage(img, 0, 0, editCanvas.width, editCanvas.height);
+                                editCanvasContainer.style.display = 'flex'; // Show edit canvas
+                            };
+                            img.src = editedImageUrl;
+                        })
+                        .catch(error => console.error('Error editing image:', error));
+                });
             });
         });
     </script>
