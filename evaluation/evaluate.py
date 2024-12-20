@@ -171,6 +171,9 @@ all_tgt_image_folders={
     # ablation results of add target latent
     "8_ablation_directinversion_add-source+p2p":"output/ablation_directinversion_add-source+p2p/annotation_images",
     "8_ablation_directinversion_add-target+p2p":"output/ablation_directinversion_add-target+p2p/annotation_images",
+    # control sketchy + control net
+    "9_sketchy-controlnet":"output/sketchy-controlnet/annotation_images",
+    "9_controlnet":"output/controlnet/annotation_images",
     }
 
 
@@ -276,9 +279,9 @@ if __name__=="__main__":
                 # tgt_image = tgt_image.crop((tgt_image.size[0]-512*2,tgt_image.size[1]-512,tgt_image.size[0]-512,tgt_image.size[1])) 
             
             for metric in metrics:
-                print(f"evluating metric: {metric}")
+                print(f"evaluating metric: {metric}")
                 evaluation_result.append(calculate_metric(metrics_calculator,metric,src_image, tgt_image, mask, mask, original_prompt, editing_prompt))
-                exit()  
+                # exit()  
                         
         with open(result_path,'a+',newline="") as f:
             csv_write = csv.writer(f)

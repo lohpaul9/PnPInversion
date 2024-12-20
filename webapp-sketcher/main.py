@@ -87,10 +87,24 @@ pipeline = load_model()
 def run_inference(instruction, image, sketch, pipeline=None, transparent_background=True):
     if not pipeline:
         pipeline = load_model()
-        
+    # save sketch just to check
+    sketch.save("sketch_unchanged.png")
+
     if transparent_background:
-        sketch = sketch.convert('L')
-        sketch = sketch.point(lambda p: p > 128 and 255)
+        # for each pixel, if it's transparent, set it to white
+        # print it
+        new_sketch = Image.new("RGB", sketch.size, (255, 255, 255))  # White background
+        for x in range(sketch.width):
+            for y in range(sketch.height):
+                if sketch.getpixel((x, y)) != (0, 0, 0, 0):
+                    # then this is a black pixel
+                    new_sketch.putpixel((x, y), (0, 0, 0))
+                else:
+                    new_sketch.putpixel((x, y), (255, 255, 255))
+        sketch = new_sketch
+        print("Sketch converted to white background")
+    
+    sketch.save("sketch_white_background.png")
 
     setup_seed()
     torch.cuda.empty_cache()
@@ -159,11 +173,13 @@ async def edit_image(
 
     sketch_image_bytes = await sketch_image.read()
     sketch_image = Image.open(io.BytesIO(sketch_image_bytes))
+
+    # convert all the alpha to white, and all the black to black
     
-    # edited_image = run_inference(instruction, image, sketch_image)
+    edited_image = run_inference(instruction, image, sketch_image)
     
     edited_image_path = "static/result.jpg"
-    # edited_image.save(edited_image_path)
+    edited_image.save(edited_image_path)
 
     return FileResponse(edited_image_path)
 

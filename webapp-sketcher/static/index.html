@@ -10,6 +10,21 @@
         .canvas-container { display: flex; flex-direction: column; align-items: center; margin: 10px; }
         canvas { border: 1px solid black; }
         textarea { width: 300px; height: 100px; } /* Larger edit instruction box */
+        #loadingBar {
+            display: none; /* Hidden by default */
+            width: 100%;
+            height: 20px;
+            background-color: #f3f3f3;
+            border: 1px solid #ccc;
+            position: relative;
+            margin: 10px 0;
+        }
+        #loadingProgress {
+            height: 100%;
+            width: 0;
+            background-color: #4caf50;
+            transition: width 0.5s;
+        }
     </style>
 </head>
 <body>
@@ -21,6 +36,9 @@
     <button id="editBtn">Edit Image</button>
     <button id="undoBtn">Undo Last Sketch Line</button>
     <br><br>
+    <div id="loadingBar">
+        <div id="loadingProgress"></div>
+    </div>
     <div class="flex-container">
         <div class="canvas-container">
             <label for="canvas">Canvas + Underlying Image</label>
@@ -46,6 +64,8 @@
         const editCanvas = document.getElementById('editCanvas');
         const editCanvasContainer = document.getElementById('editCanvasContainer');
         const hiddenOriginalImageCanvas = document.getElementById('hiddenOriginalImageCanvas');
+        const loadingBar = document.getElementById('loadingBar');
+        const loadingProgress = document.getElementById('loadingProgress');
         const ctx = canvas.getContext('2d');
         const sketchCtx = sketchCanvas.getContext('2d');
         const editCtx = editCanvas.getContext('2d');
@@ -97,6 +117,39 @@
                 ctx.moveTo(e.offsetX, e.offsetY);
                 sketchCtx.beginPath();
                 sketchCtx.moveTo(e.offsetX, e.offsetY);
+            }
+        });
+
+        // Add touch event listeners
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Prevent default touch behavior
+            drawing = true;
+            const touch = e.touches[0]; // Get the first touch point
+            currentPath = [];
+            currentPath.push({ x: touch.clientX - canvas.getBoundingClientRect().left, y: touch.clientY - canvas.getBoundingClientRect().top });
+        });
+
+        canvas.addEventListener('touchend', () => {
+            drawing = false;
+            sketchPaths.push(currentPath);
+            currentPath = [];
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Prevent default touch behavior
+            if (drawing) {
+                const touch = e.touches[0]; // Get the first touch point
+                currentPath.push({ x: touch.clientX - canvas.getBoundingClientRect().left, y: touch.clientY - canvas.getBoundingClientRect().top });
+                ctx.lineTo(touch.clientX - canvas.getBoundingClientRect().left, touch.clientY - canvas.getBoundingClientRect().top);
+                ctx.stroke();
+                sketchCtx.lineTo(touch.clientX - canvas.getBoundingClientRect().left, touch.clientY - canvas.getBoundingClientRect().top); // Draw on the sketch canvas
+                sketchCtx.stroke();
+            } else {
+                ctx.beginPath();
+                const touch = e.touches[0]; // Get the first touch point
+                ctx.moveTo(touch.clientX - canvas.getBoundingClientRect().left, touch.clientY - canvas.getBoundingClientRect().top);
+                sketchCtx.beginPath();
+                sketchCtx.moveTo(touch.clientX - canvas.getBoundingClientRect().left, touch.clientY - canvas.getBoundingClientRect().top);
             }
         });
 
@@ -167,8 +220,26 @@
                     formData.append('sketch_image', sketchBlob, 'sketch.png');
                     formData.append('instruction', editInstruction);
 
+                    // Show loading bar
+                    loadingBar.style.display = 'block';
+                    loadingProgress.style.width = '0%'; // Reset loading progress
+
+                    let progress = 0;
+                            const interval = setInterval(() => {
+                                progress += 10; // Increment progress
+                                loadingProgress.style.width = `${progress}%`;
+                                if (progress >= 100) {
+                                    clearInterval(interval);
+                                }
+                    }, 500); // Update every 500ms
+
                     fetch('/edit/', { method: 'POST', body: formData })
-                        .then(response => response.blob())
+                        .then(response => {
+                            // Simulate loading progress
+
+
+                            return response.blob();
+                        })
                         .then(editedBlob => {
                             const editedImageUrl = URL.createObjectURL(editedBlob);
                             const img = new Image();
@@ -176,10 +247,14 @@
                                 editCtx.clearRect(0, 0, editCanvas.width, editCanvas.height);
                                 editCtx.drawImage(img, 0, 0, editCanvas.width, editCanvas.height);
                                 editCanvasContainer.style.display = 'flex';
+                                loadingBar.style.display = 'none'; // Hide loading bar
                             };
                             img.src = editedImageUrl;
                         })
-                        .catch(error => console.error('Error editing image:', error));
+                        .catch(error => {
+                            console.error('Error editing image:', error);
+                            loadingBar.style.display = 'none'; // Hide loading bar on error
+                        });
                 });
             });
         });
